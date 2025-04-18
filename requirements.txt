@@ -1,0 +1,6 @@
+yfinance==0.2.40
+pandas==2.2.2
+ta==0.11.0
+pandas-ta==0.3.14b0
+scikit-learn==1.4.2
+joblib==1.4.0
