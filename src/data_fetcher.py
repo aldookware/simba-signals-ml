@@ -1,7 +1,7 @@
-import pandas as pd
 from alpha_vantage.timeseries import TimeSeries
 from dotenv import load_dotenv
 import os
+from datetime import datetime, timedelta
 
 # Load environment variables from .env file
 load_dotenv()
@@ -9,33 +9,40 @@ load_dotenv()
 ALPHA_VANTAGE_API_KEY = os.getenv("ALPHA_VANTAGE_API_KEY")  # Retrieved from .env file
 
 
-def get_stock_data(ticker: str, start: str = "2018-01-01", end: str = ""):
-    file_path = f"data/{ticker}.csv"
+def get_stock_data(ticker: str, start: str = None, end: str = None, save_csv=True):
+    ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
+    data, meta = ts.get_daily_adjusted(symbol=ticker, outputsize='full')
+    data.sort_index(inplace=True)
 
-    # Check if the data already exists locally
-    if os.path.exists(file_path):
-        print(f"Loading data for {ticker} from {file_path}")
-        data = pd.read_csv(file_path, index_col=0, parse_dates=True)
+    if not start:
+        start_date = datetime.today() - timedelta(days=5 * 365)
+        start = start_date.strftime('%Y-%m-%d')
+
+    if end:
+        data = data.loc[start:end]
     else:
-        print(f"Fetching data for {ticker} from Alpha Vantage")
-        ts = TimeSeries(key=ALPHA_VANTAGE_API_KEY, output_format='pandas')
-        data, meta = ts.get_daily(symbol=ticker, outputsize='full')
-        data.sort_index(inplace=True)
-        data = data.loc[start:end] if end else data.loc[start:]
-        data = data.rename(
-            columns={
-                '1. open': 'Open',
-                '2. high': 'High',
-                '3. low': 'Low',
-                '4. close': 'Close',
-                '5. volume': 'Volume',
-            }
-        )
+        data = data.loc[start:]
 
-        # Save the data to a CSV file
+    data = data.rename(
+        columns={
+            '1. open': 'Open',
+            '2. high': 'High',
+            '3. low': 'Low',
+            '4. close': 'Close',
+            '5. adjusted close': 'Adj Close',
+            '6. volume': 'Volume',
+            '7. dividend amount': 'Dividend',
+            '8. split coefficient': 'Split Coefficient',
+        }
+    )
+
+    if save_csv:
         os.makedirs("data", exist_ok=True)
-        data.to_csv(file_path)
-        print(f"Data for {ticker} saved to {file_path}")
+        data.to_csv(
+            f"data/{ticker}.csv", mode='w', index=True
+        )  # Overwrite existing file
+
+    return data
 
 
 def main():

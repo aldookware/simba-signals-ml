@@ -19,6 +19,7 @@ def plot_confusion_matrix(y_test, y_pred, classes, output_file="confusion_matrix
     plt.xlabel("Predicted")
     plt.ylabel("Actual")
     plt.tight_layout()
+    plt.show()
     plt.savefig(output_file)
     plt.close()
 

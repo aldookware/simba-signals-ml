@@ -31,7 +31,7 @@ def process_ticker(ticker):
 
 if __name__ == "__main__":
     # Specify a single ticker or a list of tickers
-    tickers = ["AAPL", "MSFT", "GOOGL"]  # Replace with your list of tickers
+    tickers = ["AAPL"]  # Replace with your list of tickers
 
     for ticker in tickers:
         try:
