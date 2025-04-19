@@ -7,20 +7,38 @@ enabled = true
 editor = "vscode"
 
 [project]
-# Define the project type and language
+# Project details
+name = "simba-signals-ml"
+description = "Machine learning model for stock trading signals"
 language = "python"
 framework = "data-science"
+version = "0.1.0"
 
 [preferences]
 # Set preferences for Copilot suggestions
 inline_suggestions = true
 block_suggestions = true
+completions_enabled = true
+
+[structure]
+# Key directories and files
+src_dir = "src"
+data_dir = "data"
+notebooks_dir = "notebooks"
+main_file = "main.py"
+app_file = "app.py"
 
 [exclusions]
 # Exclude certain directories and files from Copilot suggestions
 exclude_dirs = ["data", "src/__pycache__", "notebooks"]
-exclude_files = ["*.pyc", "*.pkl", "*.png", "confusion_matrix.png"]
+exclude_files = ["*.pyc", "*.pkl", "*.png", "*.csv"]
 
 [automation]
 # Automatically run formatting and linting during pre-commit hooks
 auto_run = ["black", "flake8", "pre-commit run --all-files"]
+
+[ml]
+# Machine learning specific settings
+model_file = "simba_model_best.pkl"
+metrics_file = "model_performance.csv"
+visualizations = ["confusion_matrix.png", "threshold_sweep.png"]
