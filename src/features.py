@@ -1,6 +1,5 @@
 import pandas_ta as ta
 import numpy as np
-import pandas as pd
 
 
 def add_technical_indicators(df):
@@ -61,10 +60,13 @@ def add_technical_indicators(df):
 
     # Volume-based indicators
     df['OBV'] = ta.obv(df['Close'], df['Volume'])
+
     # Fix for MFI dtype incompatibility warning
-    # properly convert to float64 before assignment
     mfi_values = ta.mfi(df['High'], df['Low'], df['Close'], df['Volume'], length=14)
-    df['MFI'] = pd.Series(mfi_values.values, index=df.index).astype('float64')
+    df['MFI'] = mfi_values.astype(
+        float
+    )  # Explicit conversion to float to fix dtype warning
+
     df['AD'] = ta.ad(df['High'], df['Low'], df['Close'], df['Volume'])
 
     # Volatility indicators
