@@ -7,5 +7,10 @@ data/*
 # Ignore all __pycache__ files
 __pycache__/
 .DS_Store
-confussion_matrix.png
-.pkl
+
+# Ignore data files
+*.csv
+*.pkl
+
+# Ignore image files
+*.png
