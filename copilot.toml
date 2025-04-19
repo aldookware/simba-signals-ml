@@ -1,0 +1,26 @@
+[core]
+# Enable Copilot for this project
+enabled = true
+
+[editor]
+# Set the editor to VS Code
+editor = "vscode"
+
+[project]
+# Define the project type and language
+language = "python"
+framework = "data-science"
+
+[preferences]
+# Set preferences for Copilot suggestions
+inline_suggestions = true
+block_suggestions = true
+
+[exclusions]
+# Exclude certain directories and files from Copilot suggestions
+exclude_dirs = ["data", "src/__pycache__", "notebooks"]
+exclude_files = ["*.pyc", "*.pkl", "*.png", "confusion_matrix.png"]
+
+[automation]
+# Automatically run formatting and linting during pre-commit hooks
+auto_run = ["black", "flake8", "pre-commit run --all-files"]
