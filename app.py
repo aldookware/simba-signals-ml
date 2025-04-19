@@ -1,13 +1,21 @@
-import yfinance as yf
+"""Web application for Simba Signals ML model deployment.
+
+This module provides a web interface for the stock market signals prediction model,
+allowing users to request predictions for specific stocks.
+"""
+
 import logging
-import pandas as pd
-import numpy as np
-import joblib
-from src.features import add_technical_indicators
 import os
 
+import joblib
+import numpy as np
+import pandas as pd
+import yfinance as yf
+
+from src.features import add_technical_indicators
+
 try:
-    from flask import Flask, request, jsonify
+    from flask import Flask, jsonify, request
 except ImportError:
     print("Flask not installed, API functionality will not be available")
 
@@ -32,7 +40,11 @@ except Exception as e:
 
 @app.route("/health", methods=["GET"])
 def health_check():
-    """Health check endpoint"""
+    """Check the health of the application and model.
+
+    Returns:
+        flask.Response: JSON response indicating health status.
+    """
     if model is not None:
         return jsonify({"status": "healthy", "model": MODEL_PATH}), 200
     else:
@@ -41,8 +53,7 @@ def health_check():
 
 @app.route("/predict", methods=["POST"])
 def predict():
-    """
-    Endpoint to make predictions on stock data.
+    """Endpoint to make predictions on stock data.
 
     Expects JSON input with the following format:
     {
@@ -60,14 +71,7 @@ def predict():
     }
 
     Returns:
-    {
-        "predictions": ["Buy", "Sell", ...],
-        "probabilities": {
-            "Buy": [0.8, 0.2, ...],
-            "Neutral": [0.1, 0.3, ...],
-            "Sell": [0.1, 0.5, ...]
-        }
-    }
+        flask.Response: JSON response with predictions and probabilities.
     """
     try:
         if model is None:
@@ -133,11 +137,14 @@ def predict():
 
 @app.route("/fetch_and_predict", methods=["GET"])
 def fetch_and_predict():
-    """
-    Endpoint to fetch recent data for a ticker symbol and make predictions.
+    """Fetch recent data for a ticker symbol and make predictions.
+
     Expects query parameters: ticker, start_date, end_date
 
     Example: /fetch_and_predict?ticker=AAPL&start_date=2023-01-01&end_date=2023-12-31
+
+    Returns:
+        flask.Response: JSON response with predictions and probabilities.
     """
     try:
         if model is None:

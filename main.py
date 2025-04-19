@@ -1,127 +1,133 @@
+"""Main application module for Simba Signals ML.
+
+This module serves as the entry point for the application and orchestrates
+the data processing, model training, and visualization pipeline.
+"""
+
 import os
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import pandas as pd
-from src.data_fetcher import get_stock_data
+import seaborn as sns
+
+from src.data_fetcher import fetch_stock_data
 from src.features import add_technical_indicators
-from src.labeler import label_signals
-from src.model import train_model, threshold_sweep
-import joblib
+from src.labeler import create_labels
+from src.model import evaluate_model, load_model, train_model
+from src.utils import get_logger, setup_logging
+
+# Initialize logging configuration
+setup_logging()
+logger = get_logger('main')
 
 
-def process_ticker(
-    ticker, save_model=True, model_name=None, thresholds=None, default_thresh=0.7
-):
+def main():
+    """Run the main ML pipeline for stock market signal generation.
+
+    This function orchestrates the entire pipeline including data collection,
+    feature engineering, label generation, model training, and evaluation.
+    Results are saved as CSV files and visualizations.
     """
-    Process a single ticker: fetch data, add indicators, label signals, and train
-    the model.
+    logger.info("Starting Simba Signals ML pipeline")
 
-    Args:
-        ticker (str): Stock ticker symbol
-        save_model (bool): Whether to save the model
-        model_name (str, optional): Custom name for model file
+    # Create necessary directories
+    Path("data").mkdir(exist_ok=True)
 
-    Returns:
-        tuple: (model, f1_score, X_test, y_test) model, performance, and test data
-    """
     try:
-        # Check if the CSV file exists
-        file_path = f"data/{ticker}.csv"
-        if not os.path.exists(file_path):
-            print(f"Fetching data for {ticker}...")
-            df = get_stock_data(ticker)
-        else:
-            print(f"Loading data for {ticker} from {file_path}...")
-            df = pd.read_csv(file_path, index_col=0, parse_dates=True)
+        # Step 1: Data Collection
+        logger.info("Step 1: Data Collection")
+        symbols = [
+            'AAPL',
+            'MSFT',
+            'GOOGL',
+            'AMZN',
+            'TSLA',
+            'BRK.B',
+            'JPM',
+            'JNJ',
+            'NVDA',
+        ]
 
-        # Add technical indicators and label signals
-        df = add_technical_indicators(df)
-        df = label_signals(df)
+        for symbol in symbols:
+            data_path = f"data/{symbol}.csv"
+            if not os.path.exists(data_path):
+                logger.info(f"Fetching data for {symbol}")
+                df = fetch_stock_data(symbol, period="5y")
+                df.to_csv(data_path)
+                logger.info(f"Saved data for {symbol} to {data_path}")
+            else:
+                logger.info(f"Data for {symbol} already exists at {data_path}")
 
-        # Train the model and get performance metrics
-        best_model, X_test, y_test = train_model(
-            df,
-            default_thresh=default_thresh,
-            class_threshs=thresholds,
-            save_model=save_model,
-        )  # Capture all the return values
+        # Step 2: Feature Engineering
+        logger.info("Step 2: Feature Engineering")
+        all_data = []
 
-        if save_model:
-            model_filename = model_name if model_name else f"simba_model_{ticker}.pkl"
-            joblib.dump(best_model, model_filename)
-            print(f"Model saved as {model_filename}")
+        for symbol in symbols:
+            logger.info(f"Processing features for {symbol}")
+            df = pd.read_csv(f"data/{symbol}.csv", index_col=0, parse_dates=True)
+            df = add_technical_indicators(df)
+            df['Symbol'] = symbol
+            all_data.append(df)
 
-        # Get the model's test F1 score
-        # This will be stored as an attribute of the model during training
-        f1 = getattr(best_model, 'test_f1_score', 0)
+        combined_data = pd.concat(all_data)
+        logger.info(f"Combined data shape: {combined_data.shape}")
 
-        # Return the model, F1 score, and test data
-        return best_model, f1, X_test, y_test
+        # Step 3: Label Generation
+        logger.info("Step 3: Label Generation")
+        labeled_data = create_labels(combined_data)
+        logger.info(f"Labeled data shape: {labeled_data.shape}")
+
+        # Step 4: Model Training & Evaluation
+        logger.info("Step 4: Model Training & Evaluation")
+        X_train, X_test, y_train, y_test = train_model(labeled_data)
+        model = load_model()
+
+        metrics, threshold_results = evaluate_model(model, X_test, y_test)
+        logger.info(f"Model performance: {metrics}")
+
+        # Save metrics to CSV
+        metrics_df = pd.DataFrame([metrics])
+        metrics_df.to_csv("model_performance.csv", index=False)
+        logger.info("Saved model performance metrics to model_performance.csv")
+
+        # Plot confusion matrix
+        plt.figure(figsize=(8, 6))
+        sns.heatmap(
+            metrics['confusion_matrix'],
+            annot=True,
+            fmt='d',
+            cmap='Blues',
+            xticklabels=['Negative', 'Positive'],
+            yticklabels=['Negative', 'Positive'],
+        )
+        plt.title('Confusion Matrix')
+        plt.ylabel('True Label')
+        plt.xlabel('Predicted Label')
+        plt.tight_layout()
+        plt.savefig('confusion_matrix.png')
+        logger.info("Saved confusion matrix visualization to confusion_matrix.png")
+
+        # Plot threshold sweep
+        plt.figure(figsize=(10, 6))
+        sns.lineplot(x='threshold', y='f1_score', data=threshold_results)
+        sns.lineplot(x='threshold', y='precision', data=threshold_results)
+        sns.lineplot(x='threshold', y='recall', data=threshold_results)
+        plt.title('Performance Metrics vs. Threshold')
+        plt.xlabel('Threshold')
+        plt.ylabel('Score')
+        plt.legend(['F1 Score', 'Precision', 'Recall'])
+        plt.grid(True)
+        plt.tight_layout()
+        plt.savefig('threshold_sweep.png')
+        logger.info("Saved threshold sweep visualization to threshold_sweep.png")
+
+        logger.info("Pipeline completed successfully!")
 
     except Exception as e:
-        print(f"Error processing {ticker}: {e}")
-        return None, 0, None, None
-
-
-def train_best_model(tickers, thresholds=None, save_all=False):
-    """
-    Train models for all tickers and select the best one based on F1 score.
-
-    Args:
-        tickers (list): List of stock ticker symbols
-        save_all (bool): Whether to save all individual models
-
-    Returns:
-        tuple: Best performing model, test features, and test labels
-    """
-    results = {}
-    best_score = 0
-    best_ticker = None
-    best_model = None
-    best_X_test = None
-    best_y_test = None
-
-    for ticker in tickers:
-        print(f"\n{'='*50}\nProcessing {ticker}\n{'='*50}")
-        model_result = process_ticker(
-            ticker, save_model=save_all, thresholds=thresholds
-        )
-        if model_result is not None:
-            model, score, X_test, y_test = model_result
-            results[ticker] = score
-            if score > best_score:
-                best_score = score
-                best_ticker = ticker
-                best_model = model
-                best_X_test = X_test
-                best_y_test = y_test
-
-    if best_model is not None:
-        print(f"\nBest model is from {best_ticker} with F1 score of {best_score:.4f}")
-        joblib.dump(best_model, "simba_model_best.pkl")
-        print("Best model saved as simba_model_best.pkl")
-
-        # Save performance summary
-        perf_df = pd.DataFrame.from_dict(results, orient='index', columns=['F1 Score'])
-        perf_df.index.name = 'Ticker'
-        perf_df.sort_values('F1 Score', ascending=False, inplace=True)
-        perf_df.to_csv('model_performance.csv')
-        print("Performance summary saved as model_performance.csv")
-
-        return best_model, best_X_test, best_y_test
-    else:
-        print("No successful models were trained")
-        return None, None, None
+        logger.error(f"Error in pipeline: {str(e)}", exc_info=True)
+        raise
 
 
 if __name__ == "__main__":
-    # List of tickers to process
-    tickers = ["AAPL"]
-
-    # Uncomment to process a single ticker
-    # process_ticker("AAPL", save_model=True)
-    thresholds = {'Buy': 0.55, 'Sell': 0.55}
-
-    # Train models for all tickers and select the best one
-    best_model, X_test, y_test = train_best_model(
-        tickers, thresholds=thresholds, save_all=False
-    )
-    threshold_sweep(best_model, X_test, y_test)
+    main()

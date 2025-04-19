@@ -42,3 +42,17 @@ auto_run = ["black", "flake8", "pre-commit run --all-files"]
 model_file = "simba_model_best.pkl"
 metrics_file = "model_performance.csv"
 visualizations = ["confusion_matrix.png", "threshold_sweep.png"]
+
+[logging]
+# Logging configuration for all generated code
+level = "INFO"
+format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+date_format = "%Y-%m-%d %H:%M:%S"
+log_to_file = true
+log_file = "logs/simba_signals.log"
+log_rotation = true
+max_log_size_mb = 10
+backup_count = 5
+capture_warnings = true
+log_exceptions = true
+component_loggers = ["data_fetcher", "features", "model", "labeler"]

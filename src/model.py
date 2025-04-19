@@ -1,20 +1,45 @@
+"""Machine learning model module for Simba Signals ML.
+
+This module handles training, evaluation, and prediction using a RandomForest
+classifier for stock market signal generation.
+"""
+
+import joblib
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import seaborn as sns
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.metrics import (
     classification_report,
     confusion_matrix,
-    make_scorer,
     f1_score,
+    make_scorer,
     precision_score,
     recall_score,
 )
-import joblib
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
+from sklearn.model_selection import GridSearchCV, train_test_split
+
+from .utils import get_logger
+
+# Set up logger
+logger = get_logger('model')
 
 
 def safe_f1_macro_score(y_true, y_pred):
+    """Safely compute macro F1 score, accounting for missing classes in the data.
+
+    This function calculates the F1 score with a macro average, ensuring that
+    only classes present in either the true or predicted labels are considered.
+    This prevents errors when certain classes are missing in cross-validation folds.
+
+    Args:
+        y_true (array-like): True class labels
+        y_pred (array-like): Predicted class labels
+
+    Returns:
+        float: Macro-averaged F1 score
+    """
     # Safely compute macro F1, adjusting for missing classes in folds
     labels = ['Buy', 'Neutral', 'Sell']
     present = [
@@ -24,8 +49,17 @@ def safe_f1_macro_score(y_true, y_pred):
 
 
 def plot_confusion_matrix(y_test, y_pred, classes, output_file="confusion_matrix.png"):
-    """
-    Plots and saves the confusion matrix.
+    """Plot and save the confusion matrix visualization.
+
+    This function creates a visual representation of the confusion matrix,
+    displaying the true vs predicted class counts with a color-coded heatmap.
+
+    Args:
+        y_test (array-like): True class labels
+        y_pred (array-like): Predicted class labels
+        classes (list): List of class labels to include in the visualization
+        output_file (str, optional): Path where the plot will be saved. Defaults to
+        "confusion_matrix.png"
     """
     cm = confusion_matrix(y_test, y_pred, labels=classes)
     plt.figure(figsize=(6, 4))
@@ -41,16 +75,27 @@ def plot_confusion_matrix(y_test, y_pred, classes, output_file="confusion_matrix
 
 
 def train_model(df, default_thresh=0.7, class_threshs=None, save_model=True):
-    """
-    Trains a RandomForestClassifier using a DataFrame.
+    """Train a RandomForest classifier for stock market signal prediction.
+
+    This function handles the entire model training pipeline, including:
+    - Feature and target preparation
+    - Train-test splitting
+    - Hyperparameter tuning with GridSearchCV
+    - Model evaluation
+    - Applying prediction confidence thresholds
+    - Saving the trained model to disk
 
     Args:
-        df (pd.DataFrame): DataFrame with features and Signal column
-        conf_thresh (float): Confidence threshold for predictions
-        save_model (bool): Whether to save the model to disk
+        df (pd.DataFrame): DataFrame with features and a 'Signal' column with labels
+        default_thresh (float, optional): Default confidence threshold for predictions.
+            Defaults to 0.7.
+        class_threshs (dict, optional): Class-specific thresholds as a dict mapping
+            class names to confidence thresholds. Defaults to None.
+        save_model (bool, optional): Whether to save the model to disk.
+        Defaults to True.
 
     Returns:
-        RandomForestClassifier: The trained model
+        tuple: A tuple containing (trained_model, X_test, y_test) for further evaluation
     """
     try:
         # Split features and labels
@@ -139,21 +184,36 @@ def train_model(df, default_thresh=0.7, class_threshs=None, save_model=True):
 
 
 def threshold_sweep(model, X_test, y_test):
+    """Sweep prediction confidence thresholds and analyze their impact on model metrics.
+
+    This function evaluates model performance across a range of confidence thresholds
+    (0.5 to 0.95) to help determine the optimal threshold for making predictions.
+    For each threshold, it:
+    - Makes predictions using the model
+    - Applies the threshold
+      (predictions with confidence below threshold are set to 'Neutral')
+    - Calculates precision, recall and F1 scores for each class and overall
+    - Generates visualizations showing the impact of different thresholds
+
+    Args:
+        model: Trained classifier model with predict_proba method
+        X_test (pd.DataFrame): Test feature data
+        y_test (pd.Series): True labels for test data
+
+    Returns:
+        pd.DataFrame: DataFrame containing metrics at each threshold value
     """
-    Sweep thresholds 0.5 to 0.9 for Buy and Sell, plot precision-recall curves.
-    """
+    logger.info("Performing threshold sweep analysis")
+
     thresholds = np.arange(0.5, 0.95, 0.05)
-    buy_prec = []
-    buy_rec = []
-    sell_prec = []
-    sell_rec = []
+    results = []
 
     proba = model.predict_proba(X_test)
 
     # For each threshold
     for thresh in thresholds:
         y_pred = []
-        for i, pred_probs in enumerate(proba):
+        for _, pred_probs in enumerate(proba):
             # Get the class with highest probability
             pred_class = model.classes_[np.argmax(pred_probs)]
             # Get the probability for that class
@@ -165,8 +225,7 @@ def threshold_sweep(model, X_test, y_test):
             else:
                 y_pred.append('Neutral')
 
-        # Calculate metrics for each class using appropriate average
-        # Change from binary to macro or weighted
+        # Calculate metrics
         buy_precision = precision_score(
             y_test, y_pred, average='macro', labels=['Buy'], zero_division=0
         )
@@ -181,27 +240,54 @@ def threshold_sweep(model, X_test, y_test):
             y_test, y_pred, average='macro', labels=['Sell'], zero_division=0
         )
 
-        buy_prec.append(buy_precision)
-        buy_rec.append(buy_recall)
-        sell_prec.append(sell_precision)
-        sell_rec.append(sell_recall)
+        # Calculate overall metrics
+        precision = precision_score(y_test, y_pred, average='macro', zero_division=0)
+        recall = recall_score(y_test, y_pred, average='macro', zero_division=0)
+        f1 = f1_score(y_test, y_pred, average='macro', zero_division=0)
+
+        # Store results
+        results.append(
+            {
+                'threshold': thresh,
+                'buy_precision': buy_precision,
+                'buy_recall': buy_recall,
+                'sell_precision': sell_precision,
+                'sell_recall': sell_recall,
+                'precision': precision,
+                'recall': recall,
+                'f1_score': f1,
+            }
+        )
+
+    # Convert to DataFrame
+    results_df = pd.DataFrame(results)
 
     # Plot precision-recall curves
-    plt.figure(figsize=(12, 5))
+    plt.figure(figsize=(15, 5))
 
-    plt.subplot(1, 2, 1)
-    plt.plot(thresholds, buy_prec, 'b-', label='Precision')
-    plt.plot(thresholds, buy_rec, 'g-', label='Recall')
+    plt.subplot(1, 3, 1)
+    plt.plot(thresholds, results_df['buy_precision'], 'b-', label='Precision')
+    plt.plot(thresholds, results_df['buy_recall'], 'g-', label='Recall')
     plt.title('Buy Signal Metrics vs Threshold')
     plt.xlabel('Confidence Threshold')
     plt.ylabel('Score')
     plt.legend()
     plt.grid(True)
 
-    plt.subplot(1, 2, 2)
-    plt.plot(thresholds, sell_prec, 'b-', label='Precision')
-    plt.plot(thresholds, sell_rec, 'g-', label='Recall')
+    plt.subplot(1, 3, 2)
+    plt.plot(thresholds, results_df['sell_precision'], 'b-', label='Precision')
+    plt.plot(thresholds, results_df['sell_recall'], 'g-', label='Recall')
     plt.title('Sell Signal Metrics vs Threshold')
+    plt.xlabel('Confidence Threshold')
+    plt.ylabel('Score')
+    plt.legend()
+    plt.grid(True)
+
+    plt.subplot(1, 3, 3)
+    plt.plot(thresholds, results_df['precision'], 'b-', label='Precision')
+    plt.plot(thresholds, results_df['recall'], 'g-', label='Recall')
+    plt.plot(thresholds, results_df['f1_score'], 'r-', label='F1 Score')
+    plt.title('Overall Metrics vs Threshold')
     plt.xlabel('Confidence Threshold')
     plt.ylabel('Score')
     plt.legend()
@@ -210,3 +296,7 @@ def threshold_sweep(model, X_test, y_test):
     plt.tight_layout()
     plt.savefig('threshold_sweep.png')
     plt.close()
+
+    logger.info("Threshold sweep analysis completed and saved to threshold_sweep.png")
+
+    return results_df
